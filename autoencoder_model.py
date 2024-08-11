@@ -82,5 +82,56 @@ history = autoencoder.fit(
     verbose=2)
 
 # Saving the model
-autoencoder.save("autoencoder_model.keras")
-print("Model saved successfully.")
+# autoencoder.save("autoencoder_model.keras")
+# print("Model saved successfully.")
+
+plt.plot(history.history['loss'], label='Loss')
+plt.plot(history.history['val_loss'], label='Validation Loss')
+plt.legend()
+plt.show()
+
+# Getting one batch of test images
+X_test, _ = next(test_generator)
+
+# Getting corresponding decoded images
+decoded_images = autoencoder.predict(X_test)
+
+# Checking and displaying the first 5 images
+n = 5
+plt.figure(figsize=(20, 4))
+for i in range(n):
+    # Display Original images
+    ax = plt.subplot(2, n, i + 1)
+    original = X_test[i].reshape(150, 150, 3)
+    plt.imshow(original)
+    plt.gray()
+    ax.get_xaxis().set_visible(False)
+    ax.get_yaxis().set_visible(False)
+
+    # Display Reconstruction images
+    ax = plt.subplot(2, n, i + 1 + n)
+    reconstructed = decoded_images[i].reshape(150, 150, 3)
+    plt.imshow(reconstructed)
+    plt.gray()
+    ax.get_xaxis().set_visible(False)
+    ax.get_yaxis().set_visible(False)
+plt.show()
+
+encoder = Model(input_img, encoded)
+encoded_train = encoder.predict(train_generator)
+encoded_val = encoder.predict(validation_generator)
+
+from keras.layers import Flatten, Dense
+x = Flatten()(encoder.output)
+x = Dense(1, activation='sigmoid')(x)
+
+classifier = Model(encoder.output, x)
+classifier.compile(optimizer='rmsprop', loss='binary_crossentropy', metrics=['accuracy'])
+
+classifier.summary()
+
+# Train the classifier using encoded features
+classifier.fit(encoded_train, train_generator.classes, epochs=2,
+               validation_data=(encoded_val, validation_generator.classes))
+# Evaluate the classifier on validation data
+classifier.evaluate(encoded_val, validation_generator.classes)
