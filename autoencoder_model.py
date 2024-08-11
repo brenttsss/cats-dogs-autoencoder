@@ -5,7 +5,7 @@ import os
 import shutil
 
 from keras.preprocessing.image import ImageDataGenerator
-from keras.layers import Input, Conv2D, MaxPooling2D, UpSampling2D, MaxPooling3D, Dense
+from keras.layers import Input, Conv2D, MaxPooling2D, UpSampling2D, MaxPooling3D, Dense, Flatten
 from keras.models import Model
 
 # Checking GPU availability for GPU acceleration
@@ -22,7 +22,7 @@ train_dir = os.path.join(base_dir, 'train')
 test_dir = os.path.join(base_dir, 'validation')
 
 model_datagen = ImageDataGenerator(rescale=1. / 255, validation_split=0.2)
-test_datagen = ImageDataGenerator(rescale=1. / 255)
+test_datagen = ImageDataGenerator(rescale=1. / 255, validation_split=0.2)
 
 # Creating the training and validation generators that will be used to train and validate the model
 train_generator = model_datagen.flow_from_directory(
@@ -45,7 +45,8 @@ validation_generator = model_datagen.flow_from_directory(
 test_generator = test_datagen.flow_from_directory(
     test_dir,
     target_size=(150, 150),
-    shuffle=True
+    shuffle=True,
+    class_mode='binary'
 )
 
 # Creating the autoencoder layers
@@ -117,4 +118,41 @@ for i in range(n):
     ax.get_yaxis().set_visible(False)
 plt.show()
 
+# Creating the encoder model
+encoder = Model(input_img, encoded)
 
+# Building a simple classifier using the encoder
+x = Flatten()(encoded)
+x = Dense(64, activation='relu')(x)
+x = Dense(1, activation='sigmoid')(x)
+classifier = Model(input_img, x)
+
+classifier.compile(optimizer='rmsprop', loss='binary_crossentropy', metrics=['accuracy'])
+
+# Training the classifier on the binary labeled data
+classifier.fit(
+    train_generator,
+    steps_per_epoch=16,
+    epochs=10,
+    validation_data=test_generator,
+    validation_steps=4,
+    shuffle=True,
+    verbose=2
+)
+
+# Getting one batch of test images
+X_test, y_test = next(test_generator)
+
+# Predicting the classes
+predictions = classifier.predict(X_test)
+
+# Displaying the first 5 images and their predicted classes
+n = 5
+plt.figure(figsize=(20, 4))
+for i in range(n):
+    # Display Original images
+    ax = plt.subplot(2, n, i + 1)
+    plt.imshow(X_test[i].reshape(150, 150, 3))
+    plt.title(f"Actual: {int(y_test[i])} | Predicted: {int(predictions[i] > 0.5)}")
+    plt.axis('off')
+plt.show()
