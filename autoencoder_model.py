@@ -117,21 +117,4 @@ for i in range(n):
     ax.get_yaxis().set_visible(False)
 plt.show()
 
-encoder = Model(input_img, encoded)
-encoded_train = encoder.predict(train_generator)
-encoded_val = encoder.predict(validation_generator)
 
-from keras.layers import Flatten, Dense
-x = Flatten()(encoder.output)
-x = Dense(1, activation='sigmoid')(x)
-
-classifier = Model(encoder.output, x)
-classifier.compile(optimizer='rmsprop', loss='binary_crossentropy', metrics=['accuracy'])
-
-classifier.summary()
-
-# Train the classifier using encoded features
-classifier.fit(encoded_train, train_generator.classes, epochs=2,
-               validation_data=(encoded_val, validation_generator.classes))
-# Evaluate the classifier on validation data
-classifier.evaluate(encoded_val, validation_generator.classes)
