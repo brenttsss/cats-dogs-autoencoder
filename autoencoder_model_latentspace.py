@@ -9,6 +9,8 @@ from sklearn.preprocessing import StandardScaler
 from keras.preprocessing.image import ImageDataGenerator
 from keras.layers import Input, Conv2D, MaxPooling2D, UpSampling2D
 from keras.models import Model
+from sklearn.mixture import GaussianMixture
+os.environ["OMP_NUM_THREADS"] = "7"
 
 # Checking GPU availability for GPU acceleration
 print('Num GPUs available:', len(tf.config.experimental.list_physical_devices('GPU')))
@@ -78,7 +80,7 @@ autoencoder.summary()
 history = autoencoder.fit(
     train_generator,
     steps_per_epoch=16,  # 1600 images = batch_size * steps
-    epochs=20,
+    epochs=50,
     validation_data=validation_generator,
     validation_steps=4,  # 400 images = batch_size * steps
     shuffle=True,
@@ -92,49 +94,70 @@ plt.show()
 # Creating the encoder model
 encoder = Model(input_img, encoded)
 
-# Extracting features using the encoder
-encoded_features = encoder.predict(train_generator)
+# Extract features using the encoder
+encoded_features = encoder.predict(test_generator)
 
-# Reshaping the encoded features
+# Reshape and scale the features
 encoded_features_flat = encoded_features.reshape(encoded_features.shape[0], -1)
-
-# Standardizing the features
 scaler = StandardScaler()
 encoded_features_flat = scaler.fit_transform(encoded_features_flat)
 
-# Applying PCA for dimensionality reduction (optional)
-pca = PCA(n_components=50)
-encoded_features_flat = pca.fit_transform(encoded_features_flat)
+# Separate features and labels for cats and dogs
+cats_features = []
+dogs_features = []
 
-# Performing k-means clustering
-kmeans = KMeans(n_clusters=2, random_state=42)
-kmeans.fit(encoded_features_flat)
-cluster_labels = kmeans.labels_
+for i in range(len(test_generator)):
+    batch, labels = next(test_generator)
+    encoded_batch = encoder.predict(batch)
+    flat_features = encoded_batch.reshape(encoded_batch.shape[0], -1)
 
-# Visualizing the clusters
-plt.scatter(encoded_features_flat[:, 0], encoded_features_flat[:, 1], c=cluster_labels, cmap='viridis')
-plt.title('Clustering results')
+    for j in range(flat_features.shape[0]):
+        if labels[j] == 0:  # Assuming 0 is for cats
+            cats_features.append(flat_features[j])
+        else:  # Assuming 1 is for dogs
+            dogs_features.append(flat_features[j])
+
+# Convert lists to arrays
+cats_features = np.array(cats_features)
+dogs_features = np.array(dogs_features)
+
+# Dimensionality reduction for visualization (using PCA)
+pca = PCA(n_components=2)
+cats_pca = pca.fit_transform(cats_features)
+dogs_pca = pca.fit_transform(dogs_features)
+
+# Alternatively, you can use t-SNE for non-linear dimensionality reduction
+# tsne = TSNE(n_components=2, random_state=42)
+# cats_pca = tsne.fit_transform(cats_features)
+# dogs_pca = tsne.fit_transform(dogs_features)
+
+# Plot the latent space for cats
+plt.figure(figsize=(8, 6))
+plt.scatter(cats_pca[:, 0], cats_pca[:, 1], color='blue', label='Cats')
+plt.title('Latent Space for Cats')
+plt.xlabel('Latent Dimension 1')
+plt.ylabel('Latent Dimension 2')
+plt.legend()
 plt.show()
 
-# Getting one batch of test images
-X_test, Y_test = next(test_generator)
-
-# Getting corresponding encoded features for the test set
-encoded_test_features = encoder.predict(X_test)
-encoded_test_features_flat = encoded_test_features.reshape(encoded_test_features.shape[0], -1)
-encoded_test_features_flat = scaler.transform(encoded_test_features_flat)
-encoded_test_features_flat = pca.transform(encoded_test_features_flat)
-
-# Predicting clusters for the test set
-test_cluster_labels = kmeans.predict(encoded_test_features_flat)
-
-# Displaying the first 5 images, their actual labels, and predicted clusters
-n = 5
-plt.figure(figsize=(20, 4))
-for i in range(n):
-    ax = plt.subplot(1, n, i + 1)
-    plt.imshow(X_test[i].reshape(150, 150, 3))
-    plt.title(f"Actual: {Y_test[i]} | Cluster: {test_cluster_labels[i]}")
-    plt.axis('off')
+# Plot the latent space for dogs
+plt.figure(figsize=(8, 6))
+plt.scatter(dogs_pca[:, 0], dogs_pca[:, 1], color='red', label='Dogs')
+plt.title('Latent Space for Dogs')
+plt.xlabel('Latent Dimension 1')
+plt.ylabel('Latent Dimension 2')
+plt.legend()
 plt.show()
 
+# Combine the data and plot the combined latent space
+combined_pca = np.vstack((cats_pca, dogs_pca))
+combined_labels = np.array([0] * len(cats_pca) + [1] * len(dogs_pca))  # 0 for cats, 1 for dogs
+
+plt.figure(figsize=(8, 6))
+plt.scatter(combined_pca[:len(cats_pca), 0], combined_pca[:len(cats_pca), 1], color='blue', label='Cats')
+plt.scatter(combined_pca[len(cats_pca):, 0], combined_pca[len(cats_pca):, 1], color='red', label='Dogs')
+plt.title('Combined Latent Space for Cats and Dogs')
+plt.xlabel('Latent Dimension 1')
+plt.ylabel('Latent Dimension 2')
+plt.legend()
+plt.show()
