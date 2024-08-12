@@ -3,9 +3,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 import shutil
-
+from sklearn.cluster import KMeans
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
 from keras.preprocessing.image import ImageDataGenerator
-from keras.layers import Input, Conv2D, MaxPooling2D, UpSampling2D, MaxPooling3D, Dense, Flatten
+from keras.layers import Input, Conv2D, MaxPooling2D, UpSampling2D
 from keras.models import Model
 
 # Checking GPU availability for GPU acceleration
@@ -22,9 +24,9 @@ train_dir = os.path.join(base_dir, 'train')
 test_dir = os.path.join(base_dir, 'validation')
 
 model_datagen = ImageDataGenerator(rescale=1. / 255, validation_split=0.2)
-test_datagen = ImageDataGenerator(rescale=1. / 255, validation_split=0.2)
+test_datagen = ImageDataGenerator(rescale=1. / 255)
 
-# Creating the training and validation generators that will be used to train and validate the model
+# Creating the training generator that will be used to train the autoencoder
 train_generator = model_datagen.flow_from_directory(
     train_dir,
     target_size=(150, 150),
@@ -45,7 +47,7 @@ validation_generator = model_datagen.flow_from_directory(
 test_generator = test_datagen.flow_from_directory(
     test_dir,
     target_size=(150, 150),
-    shuffle=True,
+    shuffle=False,
     class_mode='binary'
 )
 
@@ -72,7 +74,7 @@ autoencoder = Model(input_img, decoded)
 autoencoder.compile(optimizer='rmsprop', loss='mse')
 autoencoder.summary()
 
-# Training the model and defining the flow of data settings
+# Training the autoencoder
 history = autoencoder.fit(
     train_generator,
     steps_per_epoch=16,  # 1600 images = batch_size * steps
@@ -82,77 +84,57 @@ history = autoencoder.fit(
     shuffle=True,
     verbose=2)
 
-# Saving the model
-# autoencoder.save("autoencoder_model.keras")
-# print("Model saved successfully.")
-
 plt.plot(history.history['loss'], label='Loss')
 plt.plot(history.history['val_loss'], label='Validation Loss')
 plt.legend()
 plt.show()
 
-# Getting one batch of test images
-X_test, _ = next(test_generator)
-
-# Getting corresponding decoded images
-decoded_images = autoencoder.predict(X_test)
-
-# Checking and displaying the first 5 images
-n = 5
-plt.figure(figsize=(20, 4))
-for i in range(n):
-    # Display Original images
-    ax = plt.subplot(2, n, i + 1)
-    original = X_test[i].reshape(150, 150, 3)
-    plt.imshow(original)
-    plt.gray()
-    ax.get_xaxis().set_visible(False)
-    ax.get_yaxis().set_visible(False)
-
-    # Display Reconstruction images
-    ax = plt.subplot(2, n, i + 1 + n)
-    reconstructed = decoded_images[i].reshape(150, 150, 3)
-    plt.imshow(reconstructed)
-    plt.gray()
-    ax.get_xaxis().set_visible(False)
-    ax.get_yaxis().set_visible(False)
-plt.show()
-
 # Creating the encoder model
 encoder = Model(input_img, encoded)
 
-# Building a simple classifier using the encoder
-x = Flatten()(encoded)
-x = Dense(64, activation='relu')(x)
-x = Dense(1, activation='sigmoid')(x)
-classifier = Model(input_img, x)
+# Extracting features using the encoder
+encoded_features = encoder.predict(train_generator)
 
-classifier.compile(optimizer='rmsprop', loss='binary_crossentropy', metrics=['accuracy'])
+# Reshaping the encoded features
+encoded_features_flat = encoded_features.reshape(encoded_features.shape[0], -1)
 
-# Training the classifier on the binary labeled data
-classifier.fit(
-    train_generator,
-    steps_per_epoch=16,
-    epochs=10,
-    validation_data=test_generator,
-    validation_steps=4,
-    shuffle=True,
-    verbose=2
-)
+# Standardizing the features
+scaler = StandardScaler()
+encoded_features_flat = scaler.fit_transform(encoded_features_flat)
+
+# Applying PCA for dimensionality reduction (optional)
+pca = PCA(n_components=50)
+encoded_features_flat = pca.fit_transform(encoded_features_flat)
+
+# Performing k-means clustering
+kmeans = KMeans(n_clusters=2, random_state=42)
+kmeans.fit(encoded_features_flat)
+cluster_labels = kmeans.labels_
+
+# Visualizing the clusters
+plt.scatter(encoded_features_flat[:, 0], encoded_features_flat[:, 1], c=cluster_labels, cmap='viridis')
+plt.title('Clustering results')
+plt.show()
 
 # Getting one batch of test images
-X_test, y_test = next(test_generator)
+X_test, Y_test = next(test_generator)
 
-# Predicting the classes
-predictions = classifier.predict(X_test)
+# Getting corresponding encoded features for the test set
+encoded_test_features = encoder.predict(X_test)
+encoded_test_features_flat = encoded_test_features.reshape(encoded_test_features.shape[0], -1)
+encoded_test_features_flat = scaler.transform(encoded_test_features_flat)
+encoded_test_features_flat = pca.transform(encoded_test_features_flat)
 
-# Displaying the first 5 images and their predicted classes
+# Predicting clusters for the test set
+test_cluster_labels = kmeans.predict(encoded_test_features_flat)
+
+# Displaying the first 5 images, their actual labels, and predicted clusters
 n = 5
 plt.figure(figsize=(20, 4))
 for i in range(n):
-    # Display Original images
-    ax = plt.subplot(2, n, i + 1)
+    ax = plt.subplot(1, n, i + 1)
     plt.imshow(X_test[i].reshape(150, 150, 3))
-    plt.title(f"Actual: {int(y_test[i])} | Predicted: {int(predictions[i] > 0.5)}")
+    plt.title(f"Actual: {Y_test[i]} | Cluster: {test_cluster_labels[i]}")
     plt.axis('off')
 plt.show()
+
