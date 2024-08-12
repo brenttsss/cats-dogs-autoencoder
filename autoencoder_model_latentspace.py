@@ -49,7 +49,7 @@ validation_generator = model_datagen.flow_from_directory(
 test_generator = test_datagen.flow_from_directory(
     test_dir,
     target_size=(150, 150),
-    shuffle=False,
+    shuffle=True,
     class_mode='binary'
 )
 

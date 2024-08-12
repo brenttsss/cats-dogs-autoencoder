@@ -10,6 +10,7 @@ from keras.preprocessing.image import ImageDataGenerator
 from keras.layers import Input, Conv2D, MaxPooling2D, UpSampling2D
 from keras.models import Model
 from sklearn.mixture import GaussianMixture
+
 os.environ["OMP_NUM_THREADS"] = "7"
 
 # Checking GPU availability for GPU acceleration
@@ -49,7 +50,7 @@ validation_generator = model_datagen.flow_from_directory(
 test_generator = test_datagen.flow_from_directory(
     test_dir,
     target_size=(150, 150),
-    shuffle=True,
+    shuffle=False,
     class_mode='binary'
 )
 
@@ -114,7 +115,7 @@ gmm.fit(encoded_features_flat)
 cluster_labels = gmm.predict(encoded_features_flat)
 
 # Visualizing the clusters
-plt.scatter(encoded_features_flat[:, 0], encoded_features_flat[:, 1], c=cluster_labels, cmap='viridis')
+plt.scatter(encoded_features_flat[:, 0], encoded_features_flat[:, 1], c=cluster_labels, cmap='viridis', marker='x', s=10)
 plt.title('Clustering results')
 plt.show()
 
