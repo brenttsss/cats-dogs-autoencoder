@@ -122,6 +122,13 @@ plt.show()
 # Getting one batch of test images
 X_test, Y_test = next(test_generator)
 
+# Generating 5 random integers
+random_indices = np.random.randint(len(X_test), size=5)
+
+# Getting 5 random images and their corresponding labels
+X_test = X_test[random_indices]
+Y_test = Y_test[random_indices]
+
 # Getting corresponding encoded features for the test set
 encoded_test_features = encoder.predict(X_test)
 encoded_test_features_flat = encoded_test_features.reshape(encoded_test_features.shape[0], -1)
